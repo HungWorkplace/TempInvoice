@@ -315,48 +315,100 @@
           return root;
         }
 
-        function openPrintWindow(bill) {
-          const popup = window.open("", "_blank", "width=520,height=760");
-          if (!popup) {
-            throw new Error(
-              "Không mở được popup in (có thể bị chặn). Hãy cho phép popup rồi thử lại."
-            );
-          }
+        function printWithSystemDialog(bill) {
+          // Use an off-screen iframe to trigger Chrome Print Preview / system print dialog.
+          // This avoids opening a popup window (and avoids popup blockers).
+          return new Promise((resolve, reject) => {
+            const iframe = document.createElement("iframe");
+            iframe.setAttribute("title", "print");
+            iframe.style.position = "fixed";
+            iframe.style.right = "0";
+            iframe.style.bottom = "0";
+            iframe.style.width = "0";
+            iframe.style.height = "0";
+            iframe.style.border = "0";
+            iframe.style.opacity = "0";
+            iframe.style.pointerEvents = "none";
+            iframe.src = "about:blank";
 
-          const doc = popup.document;
-          doc.open();
-          doc.write(`<!doctype html><html lang="vi"><head>
+            let settled = false;
+            const cleanup = () => {
+              try {
+                iframe.remove();
+              } catch (_) {}
+            };
+            const done = () => {
+              if (settled) return;
+              settled = true;
+              window.removeEventListener("focus", onFocus);
+              cleanup();
+              resolve();
+            };
+            const fail = (err) => {
+              if (settled) return;
+              settled = true;
+              window.removeEventListener("focus", onFocus);
+              cleanup();
+              reject(err);
+            };
+
+            // Fallback: when the print dialog closes, the page usually regains focus.
+            // We attach focus listener slightly after calling print to reduce false positives.
+            let focusArmed = false;
+            const onFocus = () => {
+              if (!focusArmed) return;
+              setTimeout(done, 0);
+            };
+
+            const setupAndPrint = () => {
+              try {
+                const doc = iframe.contentDocument;
+                const win = iframe.contentWindow;
+                if (!doc || !win) throw new Error("Không thể tạo ngữ cảnh in");
+
+                doc.open();
+                doc.write(`<!doctype html><html lang="vi"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Print</title>
   <style>${PRINT_CSS}</style>
 </head><body></body></html>`);
-          doc.close();
+                doc.close();
 
-          doc.body.appendChild(renderReceipt(doc, bill));
+                doc.body.appendChild(renderReceipt(doc, bill));
 
-          popup.onafterprint = () => {
-            setTimeout(() => popup.close(), 0);
-          };
+                // Preferred signal
+                win.onafterprint = () => {
+                  done();
+                };
 
-          setTimeout(() => {
-            try {
-              popup.focus();
-            } catch (_) {}
-            popup.print();
-          }, 50);
+                window.addEventListener("focus", onFocus);
+                // Arm focus after print has had a moment to open.
+                setTimeout(() => {
+                  focusArmed = true;
+                }, 500);
 
-          return popup;
-        }
-
-        function waitForPopupClose(popup) {
-          return new Promise((resolve) => {
-            const timer = window.setInterval(() => {
-              if (!popup || popup.closed) {
-                window.clearInterval(timer);
-                resolve();
+                setTimeout(() => {
+                  try {
+                    win.focus();
+                  } catch (_) {}
+                  win.print();
+                }, 50);
+              } catch (err) {
+                fail(err);
               }
-            }, 300);
+            };
+
+            iframe.onload = setupAndPrint;
+            document.body.appendChild(iframe);
+
+            // In some browsers, onload may not fire for about:blank; attempt immediately too.
+            setTimeout(() => {
+              if (settled) return;
+              if (iframe.contentDocument && iframe.contentWindow) {
+                setupAndPrint();
+              }
+            }, 0);
           });
         }
 
@@ -376,11 +428,10 @@
           setStatus("Đang lấy dữ liệu…", `device=${device}`);
           const bill = await fetchBill(device);
 
-          setStatus("Đang mở popup in…");
-          const popup = openPrintWindow(bill);
+          setStatus("Đang mở hộp thoại in…");
+          await printWithSystemDialog(bill);
 
-          setStatus("Đang chờ in xong để quay lại KiotViet…");
-          await waitForPopupClose(popup);
+          setStatus("Đang quay lại KiotViet…");
 
           window.location.href = CONFIG.redirectUrl;
         }
