@@ -113,10 +113,7 @@
 
               html = html.replaceAll("{So_Luong}", String(qty || ""));
               html = html.replaceAll("{Don_Vi_Tinh}", unit);
-              html = html.replaceAll(
-                "{Ten_Hang_Hoa_Don_Gian}",
-                baseName
-              );
+              html = html.replaceAll("{Ten_Hang_Hoa_Don_Gian}", baseName);
               html = html.replaceAll("{Ghi_Chu_Hang_Hoa}", "");
               html = html.replaceAll("{Don_Gia}", formatMoney(unitPrice));
               html = html.replaceAll("{Thanh_Tien}", formatMoney(amount));
@@ -138,10 +135,7 @@
         root.innerHTML = root.innerHTML
           .replaceAll("{Thoi_Gian_In}", formatDateTime(savedAt))
           .replaceAll("{Tong_Tien_Hang}", formatMoney(total))
-          .replaceAll(
-            "{Tong_So_Luong}",
-            String(items.length)
-          )
+          .replaceAll("{Tong_So_Luong}", String(items.length))
           // Unused placeholders from KiotViet template
           .replaceAll("{So_Dien_Thoai_Cua_Hang}", "")
           .replaceAll("{Khach_Hang}", "")
