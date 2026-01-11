@@ -28,9 +28,38 @@
 
     <script>
       const REDIRECT_URL = "https://cuahangthuyvui.kiotviet.vn/sale/#/";
-      const TEMPLATE_URL = "./docs/template.html";
       const API_BASE_URL =
         "https://localstorage-kv-sync.hung-workplace.workers.dev/temp-bill";
+
+      const PRINT_CSS = `
+        html, body { margin: 0; padding: 0; }
+        body { font-family: Arial, Helvetica, sans-serif; }
+        .receipt { font-size: 11px; line-height: 1.25; padding: 8px; }
+        .center { text-align: center; }
+        .brand { font-weight: 700; font-size: 10px; }
+        .subtitle { font-weight: 700; font-size: 10px; margin-top: 2px; }
+        .stars { font-weight: 700; font-size: 10px; margin-top: 6px; }
+        .title { font-weight: 700; font-size: 12px; margin-top: 8px; }
+        .time { font-size: 11px; margin-top: 6px; }
+        .row { margin-top: 6px; }
+        .items { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        .items td { padding: 3px 0; vertical-align: top; }
+        .items thead td { border-top: 1px solid #000; border-bottom: 1px solid #000; font-weight: 700; padding: 4px 0; }
+        .items tbody td { border-bottom: 1px dashed #000; padding: 4px 0; }
+        .items .name { width: 60%; }
+        .items .price { width: 15%; }
+        .right { text-align: right; }
+        .total { margin-top: 10px; font-family: "Times New Roman", Times, serif; }
+        .total .label { font-size: 12px; }
+        .total .value { font-size: 18px; font-weight: 700; }
+        .note { font-family: "Times New Roman", Times, serif; font-size: 8px; margin-top: 2px; }
+        .details { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+        .details td { padding: 4px 0; vertical-align: middle; }
+        .dots { white-space: nowrap; text-align: right; color: #888; }
+        .footer { margin-top: 12px; font-size: 12px; }
+        .address { margin-top: 8px; font-size: 11px; }
+        .slogan { margin-top: 10px; padding-top: 10px; border-top: 1px dotted #000; text-align: center; font-size: 12px; font-weight: 700; }
+      `;
 
       const statusEl = document.getElementById("status");
       const detailsEl = document.getElementById("details");
@@ -76,78 +105,170 @@
         return { name: baseName || name, unit };
       }
 
-      function fillTemplate(templateHtml, billData) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(templateHtml, "text/html");
+      function createEl(doc, tagName, className, text) {
+        const el = doc.createElement(tagName);
+        if (className) el.className = className;
+        if (text !== undefined && text !== null) el.textContent = String(text);
+        return el;
+      }
 
-        const root = doc.querySelector("#kv-cke-temp");
-        if (!root) {
-          throw new Error("Template thiếu #kv-cke-temp");
-        }
-
+      function renderReceipt(doc, billData) {
         const items = Array.isArray(billData?.items) ? billData.items : [];
         const total = safeNumber(billData?.total, 0);
         const savedAt = billData?.savedAt;
+        const vat = Math.round(total * 0.015);
 
-        // Fill item rows
-        const tableBody = root.querySelector("#itemTable tbody");
-        if (tableBody) {
-          const rows = Array.from(tableBody.querySelectorAll("tr"));
-          const headerRow = rows[0] || null;
-          const itemTemplateRow = rows[1] || null;
+        const root = createEl(doc, "div", "receipt");
+        root.id = "kv-cke-temp";
 
-          // Clear existing rows
-          tableBody.innerHTML = "";
-          if (headerRow) tableBody.appendChild(headerRow);
+        const header = createEl(doc, "div", "center");
+        header.appendChild(
+          createEl(doc, "div", "brand", "TRUNG TÂM MUA SẮM THỦY VUI")
+        );
+        header.appendChild(
+          createEl(
+            doc,
+            "div",
+            "subtitle",
+            "SỬA XE ĐẠP - XE MÁY - THUỐC TÂN DƯỢC"
+          )
+        );
+        header.appendChild(createEl(doc, "div", "stars", "************"));
+        header.appendChild(createEl(doc, "div", "title", "HÓA ĐƠN THANH TOÁN"));
+        header.appendChild(
+          createEl(doc, "div", "time", `GIỜ: ${formatDateTime(savedAt)}`)
+        );
+        root.appendChild(header);
 
-          if (itemTemplateRow) {
-            for (const item of items) {
-              const qty = safeNumber(item?.qty, 0);
-              const amount = safeNumber(item?.amount, 0);
-              const unitPrice = qty > 0 ? Math.round(amount / qty) : amount;
+        // These fields are not present in the API response currently.
+        root.appendChild(
+          createEl(
+            doc,
+            "div",
+            "row",
+            "Người bán: ................................. SĐT: "
+          )
+        );
+        const customerRow = createEl(doc, "div", "row");
+        customerRow.appendChild(createEl(doc, "span", null, "Khách Hàng: "));
+        customerRow.appendChild(createEl(doc, "strong", null, ""));
+        root.appendChild(customerRow);
 
-              const { name: baseName, unit } = splitNameAndUnit(item?.name);
+        // Items table
+        const table = createEl(doc, "table", "items");
+        table.id = "itemTable";
+        const thead = doc.createElement("thead");
+        const headTr = doc.createElement("tr");
+        headTr.appendChild(createEl(doc, "td", "name", "Sản Phẩm"));
+        headTr.appendChild(createEl(doc, "td", "right price", "Giá"));
+        headTr.appendChild(createEl(doc, "td", "right", "Thành Tiền"));
+        thead.appendChild(headTr);
+        table.appendChild(thead);
 
-              const row = itemTemplateRow.cloneNode(true);
-              let html = row.innerHTML;
+        const tbody = doc.createElement("tbody");
+        for (const item of items) {
+          const qty = safeNumber(item?.qty, 0);
+          const amount = safeNumber(item?.amount, 0);
+          const unitPrice = qty > 0 ? Math.round(amount / qty) : amount;
+          const { name: baseName, unit } = splitNameAndUnit(item?.name);
 
-              html = html.replaceAll("{So_Luong}", String(qty || ""));
-              html = html.replaceAll("{Don_Vi_Tinh}", unit);
-              html = html.replaceAll("{Ten_Hang_Hoa_Don_Gian}", baseName);
-              html = html.replaceAll("{Ghi_Chu_Hang_Hoa}", "");
-              html = html.replaceAll("{Don_Gia}", formatMoney(unitPrice));
-              html = html.replaceAll("{Thanh_Tien}", formatMoney(amount));
+          const tr = doc.createElement("tr");
+          const nameTd = createEl(doc, "td", "name");
+          const nameStrong = createEl(doc, "strong");
+          nameStrong.textContent = `${qty || ""} ${unit || ""} ${
+            baseName || ""
+          }`.trim();
+          nameTd.appendChild(nameStrong);
+          tr.appendChild(nameTd);
 
-              row.innerHTML = html;
-              tableBody.appendChild(row);
-            }
-          }
+          tr.appendChild(
+            createEl(doc, "td", "right price", formatMoney(unitPrice))
+          );
+
+          const amountTd = createEl(doc, "td", "right");
+          amountTd.appendChild(
+            createEl(doc, "strong", null, formatMoney(amount))
+          );
+          tr.appendChild(amountTd);
+
+          tbody.appendChild(tr);
         }
+        table.appendChild(tbody);
+        root.appendChild(table);
 
-        // Fill VAT (template uses an element, not a placeholder)
-        const vatEl = root.querySelector(".thue-moi");
-        if (vatEl) {
-          const vat = Math.round(total * 0.015);
-          vatEl.textContent = vat > 0 ? formatMoney(vat) : "0";
-        }
+        // Total
+        const totalWrap = createEl(doc, "div", "total");
+        totalWrap.appendChild(createEl(doc, "span", "label", "Tổng:"));
+        totalWrap.appendChild(
+          createEl(doc, "strong", "tong-tien-hang value", formatMoney(total))
+        );
+        root.appendChild(totalWrap);
+        root.appendChild(createEl(doc, "div", "note", "(Đã bao gồm thuế)"));
 
-        // Fill summary placeholders
-        root.innerHTML = root.innerHTML
-          .replaceAll("{Thoi_Gian_In}", formatDateTime(savedAt))
-          .replaceAll("{Tong_Tien_Hang}", formatMoney(total))
-          .replaceAll("{Tong_So_Luong}", String(items.length))
-          // Unused placeholders from KiotViet template
-          .replaceAll("{So_Dien_Thoai_Cua_Hang}", "")
-          .replaceAll("{Khach_Hang}", "")
-          .replaceAll("{Ma_Don_Hang}", "")
-          .replaceAll("{Ten_Bang_Gia}", "")
-          // Strip any remaining {Placeholders}
-          .replace(/\{[^}]+\}/g, "");
+        const hungwTest = doc.createElement("div");
+        hungwTest.id = "hungw-test";
+        hungwTest.innerHTML = "&nbsp;";
+        root.appendChild(hungwTest);
 
-        return root.outerHTML;
+        // Details
+        const detailsTable = createEl(doc, "table", "details");
+        const detailsBody = doc.createElement("tbody");
+
+        const r1 = doc.createElement("tr");
+        const r1c1 = createEl(doc, "td", null, " - ");
+        const r1Strong = createEl(doc, "strong", null, "");
+        r1c1.textContent = "";
+        r1c1.appendChild(doc.createTextNode(" - "));
+        r1c1.appendChild(r1Strong);
+        r1.appendChild(r1c1);
+        r1.appendChild(
+          createEl(doc, "td", "dots", ".........................")
+        );
+        detailsBody.appendChild(r1);
+
+        const r2 = doc.createElement("tr");
+        const r2c1 = createEl(doc, "td");
+        r2c1.appendChild(createEl(doc, "span", null, "Tổng Số Lượng: "));
+        r2c1.appendChild(createEl(doc, "strong", null, `${items.length} thứ`));
+        r2.appendChild(r2c1);
+        r2.appendChild(
+          createEl(doc, "td", "dots", ".........................")
+        );
+        detailsBody.appendChild(r2);
+
+        const r3 = doc.createElement("tr");
+        const r3c1 = createEl(doc, "td");
+        r3c1.appendChild(
+          createEl(doc, "span", null, "Thuế VAT 1.5% nộp về nhà nước: ")
+        );
+        r3c1.appendChild(createEl(doc, "span", "thue-moi", formatMoney(vat)));
+        r3.appendChild(r3c1);
+        detailsBody.appendChild(r3);
+
+        detailsTable.appendChild(detailsBody);
+        root.appendChild(detailsTable);
+
+        root.appendChild(
+          createEl(
+            doc,
+            "div",
+            "footer",
+            "Mới: RÚT TIỀN ATM, CHUYỂN TIỀN, THANH TOÁN ĐIỆN NƯỚC tại Cửa Hàng"
+          )
+        );
+        root.appendChild(
+          createEl(doc, "div", "address", "ĐC: Thủy Vui, Sào Lâm, Văn Phú")
+        );
+        const slogan = createEl(doc, "div", "slogan");
+        slogan.appendChild(
+          createEl(doc, "strong", null, "Gì cũng có - mua hết ở Thủy Vui")
+        );
+        root.appendChild(slogan);
+
+        return root;
       }
 
-      function openPrintPopup(htmlToPrint) {
+      function openPrintPopup(billData) {
         const popup = window.open("", "_blank", "width=520,height=760");
         if (!popup) {
           throw new Error(
@@ -155,32 +276,30 @@
           );
         }
 
-        popup.document.open();
-        popup.document.write(`<!doctype html>
-<html lang="vi">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Print</title>
-  </head>
-  <body>
-    ${htmlToPrint}
-    <script>
-      window.onload = () => {
-        // Slight delay helps some browsers finish layout before printing
+        const d = popup.document;
+        d.open();
+        d.write(`<!doctype html><html lang="vi"><head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Print</title>
+  <style>${PRINT_CSS}</style>
+</head><body></body></html>`);
+        d.close();
+
+        const receipt = renderReceipt(d, billData);
+        d.body.appendChild(receipt);
+
+        popup.onafterprint = () => {
+          setTimeout(() => popup.close(), 0);
+        };
+
+        // Slight delay helps browsers finish layout before printing
         setTimeout(() => {
-          try { window.focus(); } catch (e) {}
-          window.print();
+          try {
+            popup.focus();
+          } catch (e) {}
+          popup.print();
         }, 50);
-      };
-      window.onafterprint = () => {
-        // Close popup after user closes print dialog (print or cancel)
-        setTimeout(() => window.close(), 0);
-      };
-    <\/script>
-  </body>
-</html>`);
-        popup.document.close();
 
         return popup;
       }
@@ -210,18 +329,10 @@
         const apiUrl = new URL(API_BASE_URL);
         apiUrl.searchParams.set("device", device);
 
-        const [apiRes, templateRes] = await Promise.all([
-          fetch(apiUrl.toString(), { cache: "no-store" }),
-          fetch(TEMPLATE_URL, { cache: "no-store" }),
-        ]);
+        const apiRes = await fetch(apiUrl.toString(), { cache: "no-store" });
 
         if (!apiRes.ok) {
           throw new Error(`API lỗi: ${apiRes.status} ${apiRes.statusText}`);
-        }
-        if (!templateRes.ok) {
-          throw new Error(
-            `Không tải được template: ${templateRes.status} ${templateRes.statusText}`
-          );
         }
 
         const apiJson = await apiRes.json();
@@ -230,11 +341,8 @@
           throw new Error("API không có trường data");
         }
 
-        const templateHtml = await templateRes.text();
-        const htmlToPrint = fillTemplate(templateHtml, billData);
-
         setStatus("Đang mở popup in…");
-        const popup = openPrintPopup(htmlToPrint);
+        const popup = openPrintPopup(billData);
 
         setStatus("Đang chờ in xong để quay lại KiotViet…");
         await waitForPopupClose(popup);
