@@ -27,333 +27,369 @@
     <noscript> Trang này cần JavaScript để in hóa đơn. </noscript>
 
     <script>
-      const REDIRECT_URL = "https://cuahangthuyvui.kiotviet.vn/sale/#/";
-      const API_BASE_URL =
-        "https://localstorage-kv-sync.hung-workplace.workers.dev/temp-bill";
+      (() => {
+        "use strict";
 
-      const PRINT_CSS = `
-        html, body { margin: 0; padding: 0; }
-        body { font-family: Arial, Helvetica, sans-serif; }
-        .receipt { font-size: 11px; line-height: 1.25; padding: 8px; }
-        .center { text-align: center; }
-        .brand { font-weight: 700; font-size: 10px; }
-        .subtitle { font-weight: 700; font-size: 10px; margin-top: 2px; }
-        .stars { font-weight: 700; font-size: 10px; margin-top: 6px; }
-        .title { font-weight: 700; font-size: 12px; margin-top: 8px; }
-        .time { font-size: 11px; margin-top: 6px; }
-        .row { margin-top: 6px; }
-        .items { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        .items td { padding: 3px 0; vertical-align: top; }
-        .items thead td { border-top: 1px solid #000; border-bottom: 1px solid #000; font-weight: 700; padding: 4px 0; }
-        .items tbody td { border-bottom: 1px dashed #000; padding: 4px 0; }
-        .items .name { width: 60%; }
-        .items .price { width: 15%; }
-        .right { text-align: right; }
-        .total { margin-top: 10px; font-family: "Times New Roman", Times, serif; }
-        .total .label { font-size: 12px; }
-        .total .value { font-size: 18px; font-weight: 700; }
-        .note { font-family: "Times New Roman", Times, serif; font-size: 8px; margin-top: 2px; }
-        .details { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
-        .details td { padding: 4px 0; vertical-align: middle; }
-        .dots { white-space: nowrap; text-align: right; color: #888; }
-        .footer { margin-top: 12px; font-size: 12px; }
-        .address { margin-top: 8px; font-size: 11px; }
-        .slogan { margin-top: 10px; padding-top: 10px; border-top: 1px dotted #000; text-align: center; font-size: 12px; font-weight: 700; }
-      `;
+        const CONFIG = {
+          redirectUrl: "https://cuahangthuyvui.kiotviet.vn/sale/#/",
+          apiBaseUrl:
+            "https://localstorage-kv-sync.hung-workplace.workers.dev/temp-bill",
+          vatRate: 0.015,
+        };
 
-      const statusEl = document.getElementById("status");
-      const detailsEl = document.getElementById("details");
-      const errorEl = document.getElementById("error");
+        const STORE = {
+          name: "TRUNG TÂM MUA SẮM THỦY VUI",
+          subtitle: "SỬA XE ĐẠP - XE MÁY - THUỐC TÂN DƯỢC",
+          address: "ĐC: Thủy Vui, Sào Lâm, Văn Phú",
+        };
 
-      function setStatus(text, detail) {
-        statusEl.textContent = text;
-        detailsEl.textContent = detail || "";
-      }
+        const PRINT_CSS = `
+          html, body { margin: 0; padding: 0; }
+          body { font-family: Arial, Helvetica, sans-serif; }
+          .receipt { font-size: 11px; line-height: 1.25; padding: 8px; }
+          .center { text-align: center; }
+          .brand { font-weight: 700; font-size: 10px; }
+          .subtitle { font-weight: 700; font-size: 10px; margin-top: 2px; }
+          .stars { font-weight: 700; font-size: 10px; margin-top: 6px; }
+          .title { font-weight: 700; font-size: 12px; margin-top: 8px; }
+          .time { font-size: 11px; margin-top: 6px; }
+          .row { margin-top: 6px; }
 
-      function showError(message) {
-        errorEl.hidden = false;
-        errorEl.textContent = message;
-      }
+          .items { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          .items td { padding: 3px 0; vertical-align: top; }
+          .items thead td { border-top: 1px solid #000; border-bottom: 1px solid #000; font-weight: 700; padding: 4px 0; }
+          .items tbody td { border-bottom: 1px dashed #000; padding: 4px 0; }
+          .items .name { width: 60%; }
+          .items .price { width: 15%; }
+          .right { text-align: right; }
 
-      function formatMoney(amount) {
-        const numeric = typeof amount === "number" ? amount : Number(amount);
-        if (!Number.isFinite(numeric)) return "";
-        return new Intl.NumberFormat("vi-VN").format(numeric);
-      }
+          .total { margin-top: 10px; font-family: "Times New Roman", Times, serif; }
+          .total .label { font-size: 12px; }
+          .total .value { font-size: 18px; font-weight: 700; }
+          .note { font-family: "Times New Roman", Times, serif; font-size: 8px; margin-top: 2px; }
 
-      function formatDateTime(value) {
-        const date = value ? new Date(value) : new Date();
-        if (Number.isNaN(date.getTime())) return "";
-        return date.toLocaleString("vi-VN");
-      }
+          .details { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+          .details td { padding: 4px 0; vertical-align: middle; }
+          .dots { white-space: nowrap; text-align: right; color: #888; }
 
-      function safeNumber(value, fallback = 0) {
-        const numeric = typeof value === "number" ? value : Number(value);
-        return Number.isFinite(numeric) ? numeric : fallback;
-      }
+          .footer { margin-top: 12px; font-size: 12px; }
+          .address { margin-top: 8px; font-size: 11px; font-weight: 700; }
+          .slogan { margin-top: 10px; padding-top: 10px; border-top: 1px dotted #000; text-align: center; font-size: 12px; font-weight: 700; }
+        `;
 
-      function splitNameAndUnit(rawName) {
-        const name = String(rawName ?? "").trim();
-        if (!name) return { name: "", unit: "" };
+        const ui = {
+          status: document.getElementById("status"),
+          details: document.getElementById("details"),
+          error: document.getElementById("error"),
+        };
 
-        // Common pattern in your data: "Tên hàng - (Đơn vị)"
-        const dashParenMatch = name.match(/^(.*?)(?:\s*-\s*)?\(([^)]+)\)\s*$/);
-        if (!dashParenMatch) return { name, unit: "" };
+        function setStatus(text, detail) {
+          ui.status.textContent = String(text ?? "");
+          ui.details.textContent = detail ? String(detail) : "";
+        }
 
-        const baseName = String(dashParenMatch[1] ?? "").trim();
-        const unit = String(dashParenMatch[2] ?? "").trim();
-        return { name: baseName || name, unit };
-      }
+        function showError(message) {
+          ui.error.hidden = false;
+          ui.error.textContent = String(message ?? "");
+        }
 
-      function createEl(doc, tagName, className, text) {
-        const el = doc.createElement(tagName);
-        if (className) el.className = className;
-        if (text !== undefined && text !== null) el.textContent = String(text);
-        return el;
-      }
+        function safeNumber(value, fallback = 0) {
+          const numeric = typeof value === "number" ? value : Number(value);
+          return Number.isFinite(numeric) ? numeric : fallback;
+        }
 
-      function renderReceipt(doc, billData) {
-        const items = Array.isArray(billData?.items) ? billData.items : [];
-        const total = safeNumber(billData?.total, 0);
-        const savedAt = billData?.savedAt;
-        const vat = Math.round(total * 0.015);
+        function formatMoney(amount) {
+          const numeric = safeNumber(amount, NaN);
+          if (!Number.isFinite(numeric)) return "";
+          return new Intl.NumberFormat("vi-VN").format(numeric);
+        }
 
-        const root = createEl(doc, "div", "receipt");
-        root.id = "kv-cke-temp";
+        function formatDateTime(value) {
+          const date = value ? new Date(value) : new Date();
+          if (Number.isNaN(date.getTime())) return "";
+          return date.toLocaleString("vi-VN");
+        }
 
-        const header = createEl(doc, "div", "center");
-        header.appendChild(
-          createEl(doc, "div", "brand", "TRUNG TÂM MUA SẮM THỦY VUI")
-        );
-        header.appendChild(
-          createEl(
+        function splitNameAndUnit(rawName) {
+          const name = String(rawName ?? "").trim();
+          if (!name) return { name: "", unit: "" };
+
+          // pattern: "Tên hàng - (đơn vị)" or "Tên hàng (đơn vị)"
+          const match = name.match(/^(.*?)(?:\s*-\s*)?\(([^)]+)\)\s*$/);
+          if (!match) return { name, unit: "" };
+
+          const baseName = String(match[1] ?? "").trim();
+          const unit = String(match[2] ?? "").trim();
+          return { name: baseName || name, unit };
+        }
+
+        function getDeviceParam() {
+          const url = new URL(window.location.href);
+          const device = String(url.searchParams.get("device") ?? "").trim();
+          return device;
+        }
+
+        async function fetchBill(device) {
+          const apiUrl = new URL(CONFIG.apiBaseUrl);
+          apiUrl.searchParams.set("device", device);
+
+          const res = await fetch(apiUrl.toString(), { cache: "no-store" });
+          if (!res.ok) {
+            throw new Error(`API lỗi: ${res.status} ${res.statusText}`);
+          }
+
+          const json = await res.json();
+          if (!json || !json.data) {
+            throw new Error("API không có trường data");
+          }
+
+          return json.data;
+        }
+
+        function el(doc, tag, className, text) {
+          const node = doc.createElement(tag);
+          if (className) node.className = className;
+          if (text !== undefined && text !== null)
+            node.textContent = String(text);
+          return node;
+        }
+
+        function appendText(doc, parent, text) {
+          parent.appendChild(doc.createTextNode(String(text ?? "")));
+        }
+
+        function renderReceipt(doc, bill) {
+          const items = Array.isArray(bill?.items) ? bill.items : [];
+          const total = safeNumber(bill?.total, 0);
+          const vat = Math.round(total * CONFIG.vatRate);
+
+          // Optional fields (not present in current API, but supported if later added)
+          const customerName = String(bill?.customerName ?? "").trim();
+          const storePhone = String(bill?.storePhone ?? "").trim();
+          const orderCode = String(bill?.orderCode ?? "").trim();
+          const priceListName = String(bill?.priceListName ?? "").trim();
+
+          const root = el(doc, "div", "receipt");
+          root.id = "kv-cke-temp";
+
+          const header = el(doc, "div", "center");
+          header.appendChild(el(doc, "div", "brand", STORE.name));
+          header.appendChild(el(doc, "div", "subtitle", STORE.subtitle));
+          header.appendChild(el(doc, "div", "stars", "************"));
+          header.appendChild(el(doc, "div", "title", "HÓA ĐƠN THANH TOÁN"));
+          header.appendChild(
+            el(doc, "div", "time", `GIỜ: ${formatDateTime(bill?.savedAt)}`)
+          );
+          root.appendChild(header);
+
+          // Seller / phone
+          const sellerRow = el(doc, "div", "row");
+          appendText(
             doc,
-            "div",
-            "subtitle",
-            "SỬA XE ĐẠP - XE MÁY - THUỐC TÂN DƯỢC"
-          )
-        );
-        header.appendChild(createEl(doc, "div", "stars", "************"));
-        header.appendChild(createEl(doc, "div", "title", "HÓA ĐƠN THANH TOÁN"));
-        header.appendChild(
-          createEl(doc, "div", "time", `GIỜ: ${formatDateTime(savedAt)}`)
-        );
-        root.appendChild(header);
-
-        // These fields are not present in the API response currently.
-        root.appendChild(
-          createEl(
-            doc,
-            "div",
-            "row",
+            sellerRow,
             "Người bán: ................................. SĐT: "
-          )
-        );
-        const customerRow = createEl(doc, "div", "row");
-        customerRow.appendChild(createEl(doc, "span", null, "Khách Hàng: "));
-        customerRow.appendChild(createEl(doc, "strong", null, ""));
-        root.appendChild(customerRow);
-
-        // Items table
-        const table = createEl(doc, "table", "items");
-        table.id = "itemTable";
-        const thead = doc.createElement("thead");
-        const headTr = doc.createElement("tr");
-        headTr.appendChild(createEl(doc, "td", "name", "Sản Phẩm"));
-        headTr.appendChild(createEl(doc, "td", "right price", "Giá"));
-        headTr.appendChild(createEl(doc, "td", "right", "Thành Tiền"));
-        thead.appendChild(headTr);
-        table.appendChild(thead);
-
-        const tbody = doc.createElement("tbody");
-        for (const item of items) {
-          const qty = safeNumber(item?.qty, 0);
-          const amount = safeNumber(item?.amount, 0);
-          const unitPrice = qty > 0 ? Math.round(amount / qty) : amount;
-          const { name: baseName, unit } = splitNameAndUnit(item?.name);
-
-          const tr = doc.createElement("tr");
-          const nameTd = createEl(doc, "td", "name");
-          const nameStrong = createEl(doc, "strong");
-          nameStrong.textContent = `${qty || ""} ${unit || ""} ${
-            baseName || ""
-          }`.trim();
-          nameTd.appendChild(nameStrong);
-          tr.appendChild(nameTd);
-
-          tr.appendChild(
-            createEl(doc, "td", "right price", formatMoney(unitPrice))
           );
+          if (storePhone) {
+            sellerRow.appendChild(el(doc, "span", null, storePhone));
+          }
+          root.appendChild(sellerRow);
 
-          const amountTd = createEl(doc, "td", "right");
-          amountTd.appendChild(
-            createEl(doc, "strong", null, formatMoney(amount))
+          // Customer
+          const customerRow = el(doc, "div", "row");
+          appendText(doc, customerRow, "Khách Hàng: ");
+          customerRow.appendChild(el(doc, "strong", null, customerName));
+          root.appendChild(customerRow);
+
+          // Items table
+          const table = el(doc, "table", "items");
+          table.id = "itemTable";
+
+          const thead = doc.createElement("thead");
+          const headTr = doc.createElement("tr");
+          headTr.appendChild(el(doc, "td", "name", "Sản Phẩm"));
+          headTr.appendChild(el(doc, "td", "right price", "Giá"));
+          headTr.appendChild(el(doc, "td", "right", "Thành Tiền"));
+          thead.appendChild(headTr);
+          table.appendChild(thead);
+
+          const tbody = doc.createElement("tbody");
+          for (const item of items) {
+            const qty = safeNumber(item?.qty, 0);
+            const amount = safeNumber(item?.amount, 0);
+            const unitPrice = qty > 0 ? Math.round(amount / qty) : amount;
+            const { name, unit } = splitNameAndUnit(item?.name);
+
+            const tr = doc.createElement("tr");
+
+            const nameTd = el(doc, "td", "name");
+            const nameStrong = el(doc, "strong");
+            nameStrong.textContent = `${qty || ""} ${unit || ""} ${
+              name || ""
+            }`.trim();
+            nameTd.appendChild(nameStrong);
+            tr.appendChild(nameTd);
+
+            tr.appendChild(
+              el(doc, "td", "right price", formatMoney(unitPrice))
+            );
+
+            const amountTd = el(doc, "td", "right");
+            amountTd.appendChild(el(doc, "strong", null, formatMoney(amount)));
+            tr.appendChild(amountTd);
+
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+          root.appendChild(table);
+
+          // Total
+          const totalWrap = el(doc, "div", "total");
+          totalWrap.appendChild(el(doc, "span", "label", "Tổng:"));
+          totalWrap.appendChild(
+            el(doc, "strong", "tong-tien-hang value", formatMoney(total))
           );
-          tr.appendChild(amountTd);
+          root.appendChild(totalWrap);
+          root.appendChild(el(doc, "div", "note", "(Đã bao gồm thuế)"));
 
-          tbody.appendChild(tr);
-        }
-        table.appendChild(tbody);
-        root.appendChild(table);
+          const spacer = doc.createElement("div");
+          spacer.id = "hungw-test";
+          spacer.innerHTML = "&nbsp;";
+          root.appendChild(spacer);
 
-        // Total
-        const totalWrap = createEl(doc, "div", "total");
-        totalWrap.appendChild(createEl(doc, "span", "label", "Tổng:"));
-        totalWrap.appendChild(
-          createEl(doc, "strong", "tong-tien-hang value", formatMoney(total))
-        );
-        root.appendChild(totalWrap);
-        root.appendChild(createEl(doc, "div", "note", "(Đã bao gồm thuế)"));
+          // Details
+          const detailsTable = el(doc, "table", "details");
+          const detailsBody = doc.createElement("tbody");
 
-        const hungwTest = doc.createElement("div");
-        hungwTest.id = "hungw-test";
-        hungwTest.innerHTML = "&nbsp;";
-        root.appendChild(hungwTest);
+          // Row 1: orderCode - priceListName (only if any present)
+          if (orderCode || priceListName) {
+            const tr1 = doc.createElement("tr");
+            const td1 = doc.createElement("td");
+            appendText(doc, td1, orderCode);
+            appendText(doc, td1, " - ");
+            td1.appendChild(el(doc, "strong", null, priceListName));
+            tr1.appendChild(td1);
+            tr1.appendChild(el(doc, "td", "dots", "........................."));
+            detailsBody.appendChild(tr1);
+          }
 
-        // Details
-        const detailsTable = createEl(doc, "table", "details");
-        const detailsBody = doc.createElement("tbody");
+          // Row 2: total item lines
+          const tr2 = doc.createElement("tr");
+          const td2 = doc.createElement("td");
+          appendText(doc, td2, "Tổng Số Lượng: ");
+          td2.appendChild(el(doc, "strong", null, `${items.length} thứ`));
+          tr2.appendChild(td2);
+          tr2.appendChild(el(doc, "td", "dots", "........................."));
+          detailsBody.appendChild(tr2);
 
-        const r1 = doc.createElement("tr");
-        const r1c1 = createEl(doc, "td", null, " - ");
-        const r1Strong = createEl(doc, "strong", null, "");
-        r1c1.textContent = "";
-        r1c1.appendChild(doc.createTextNode(" - "));
-        r1c1.appendChild(r1Strong);
-        r1.appendChild(r1c1);
-        r1.appendChild(
-          createEl(doc, "td", "dots", ".........................")
-        );
-        detailsBody.appendChild(r1);
+          // Row 3: VAT
+          const tr3 = doc.createElement("tr");
+          const td3 = doc.createElement("td");
+          appendText(doc, td3, "Thuế VAT 1.5% nộp về nhà nước: ");
+          td3.appendChild(el(doc, "span", null, formatMoney(vat)));
+          tr3.appendChild(td3);
+          detailsBody.appendChild(tr3);
 
-        const r2 = doc.createElement("tr");
-        const r2c1 = createEl(doc, "td");
-        r2c1.appendChild(createEl(doc, "span", null, "Tổng Số Lượng: "));
-        r2c1.appendChild(createEl(doc, "strong", null, `${items.length} thứ`));
-        r2.appendChild(r2c1);
-        r2.appendChild(
-          createEl(doc, "td", "dots", ".........................")
-        );
-        detailsBody.appendChild(r2);
+          detailsTable.appendChild(detailsBody);
+          root.appendChild(detailsTable);
 
-        const r3 = doc.createElement("tr");
-        const r3c1 = createEl(doc, "td");
-        r3c1.appendChild(
-          createEl(doc, "span", null, "Thuế VAT 1.5% nộp về nhà nước: ")
-        );
-        r3c1.appendChild(createEl(doc, "span", "thue-moi", formatMoney(vat)));
-        r3.appendChild(r3c1);
-        detailsBody.appendChild(r3);
-
-        detailsTable.appendChild(detailsBody);
-        root.appendChild(detailsTable);
-
-        root.appendChild(
-          createEl(
-            doc,
-            "div",
-            "footer",
-            "Mới: RÚT TIỀN ATM, CHUYỂN TIỀN, THANH TOÁN ĐIỆN NƯỚC tại Cửa Hàng"
-          )
-        );
-        root.appendChild(
-          createEl(doc, "div", "address", "ĐC: Thủy Vui, Sào Lâm, Văn Phú")
-        );
-        const slogan = createEl(doc, "div", "slogan");
-        slogan.appendChild(
-          createEl(doc, "strong", null, "Gì cũng có - mua hết ở Thủy Vui")
-        );
-        root.appendChild(slogan);
-
-        return root;
-      }
-
-      function openPrintPopup(billData) {
-        const popup = window.open("", "_blank", "width=520,height=760");
-        if (!popup) {
-          throw new Error(
-            "Không mở được popup in (có thể bị chặn). Hãy cho phép popup rồi thử lại."
+          // Footer text (kept similar to the reference template)
+          const footer = el(doc, "div", "footer");
+          appendText(doc, footer, "Mới: ");
+          footer.appendChild(
+            el(doc, "strong", null, "RÚT TIỀN ATM, CHUYỂN TIỀN,")
           );
+          appendText(doc, footer, " THANH TOÁN ");
+          footer.appendChild(el(doc, "strong", null, "ĐIỆN NƯỚC"));
+          appendText(doc, footer, " tại ");
+          footer.appendChild(el(doc, "strong", null, "Cửa Hàng"));
+          root.appendChild(footer);
+
+          root.appendChild(el(doc, "div", "address", STORE.address));
+
+          const slogan = el(doc, "div", "slogan");
+          slogan.appendChild(
+            el(doc, "strong", null, "Gì cũng có - mua hết ở Thủy Vui")
+          );
+          root.appendChild(slogan);
+
+          return root;
         }
 
-        const d = popup.document;
-        d.open();
-        d.write(`<!doctype html><html lang="vi"><head>
+        function openPrintWindow(bill) {
+          const popup = window.open("", "_blank", "width=520,height=760");
+          if (!popup) {
+            throw new Error(
+              "Không mở được popup in (có thể bị chặn). Hãy cho phép popup rồi thử lại."
+            );
+          }
+
+          const doc = popup.document;
+          doc.open();
+          doc.write(`<!doctype html><html lang="vi"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Print</title>
   <style>${PRINT_CSS}</style>
 </head><body></body></html>`);
-        d.close();
+          doc.close();
 
-        const receipt = renderReceipt(d, billData);
-        d.body.appendChild(receipt);
+          doc.body.appendChild(renderReceipt(doc, bill));
 
-        popup.onafterprint = () => {
-          setTimeout(() => popup.close(), 0);
-        };
+          popup.onafterprint = () => {
+            setTimeout(() => popup.close(), 0);
+          };
 
-        // Slight delay helps browsers finish layout before printing
-        setTimeout(() => {
-          try {
-            popup.focus();
-          } catch (e) {}
-          popup.print();
-        }, 50);
+          setTimeout(() => {
+            try {
+              popup.focus();
+            } catch (_) {}
+            popup.print();
+          }, 50);
 
-        return popup;
-      }
+          return popup;
+        }
 
-      function waitForPopupClose(popup) {
-        return new Promise((resolve) => {
-          const timer = window.setInterval(() => {
-            if (!popup || popup.closed) {
-              window.clearInterval(timer);
-              resolve();
-            }
-          }, 300);
+        function waitForPopupClose(popup) {
+          return new Promise((resolve) => {
+            const timer = window.setInterval(() => {
+              if (!popup || popup.closed) {
+                window.clearInterval(timer);
+                resolve();
+              }
+            }, 300);
+          });
+        }
+
+        async function run() {
+          const device = getDeviceParam();
+          if (!device) {
+            setStatus("Thiếu tham số device.");
+            ui.details.textContent = "Ví dụ: ?device=1 (device là số 1,2,3…)";
+            return;
+          }
+          if (!/^\d+$/.test(device)) {
+            setStatus("device không hợp lệ.");
+            ui.details.textContent = "device phải là số (vd: ?device=1)";
+            return;
+          }
+
+          setStatus("Đang lấy dữ liệu…", `device=${device}`);
+          const bill = await fetchBill(device);
+
+          setStatus("Đang mở popup in…");
+          const popup = openPrintWindow(bill);
+
+          setStatus("Đang chờ in xong để quay lại KiotViet…");
+          await waitForPopupClose(popup);
+
+          window.location.href = CONFIG.redirectUrl;
+        }
+
+        run().catch((err) => {
+          setStatus("Không thể in hóa đơn.");
+          showError(String(err?.message || err));
         });
-      }
-
-      async function main() {
-        const url = new URL(window.location.href);
-        const device = url.searchParams.get("device");
-        if (!device) {
-          setStatus("Thiếu tham số device.");
-          detailsEl.textContent = "Ví dụ: ?device=1 (device là số 1,2,3…)";
-          return;
-        }
-
-        setStatus("Đang lấy dữ liệu…", `device=${device}`);
-
-        const apiUrl = new URL(API_BASE_URL);
-        apiUrl.searchParams.set("device", device);
-
-        const apiRes = await fetch(apiUrl.toString(), { cache: "no-store" });
-
-        if (!apiRes.ok) {
-          throw new Error(`API lỗi: ${apiRes.status} ${apiRes.statusText}`);
-        }
-
-        const apiJson = await apiRes.json();
-        const billData = apiJson?.data;
-        if (!billData) {
-          throw new Error("API không có trường data");
-        }
-
-        setStatus("Đang mở popup in…");
-        const popup = openPrintPopup(billData);
-
-        setStatus("Đang chờ in xong để quay lại KiotViet…");
-        await waitForPopupClose(popup);
-
-        window.location.href = REDIRECT_URL;
-      }
-
-      main().catch((err) => {
-        setStatus("Không thể in hóa đơn.");
-        showError(String(err?.message || err));
-      });
+      })();
     </script>
   </body>
 </html>
