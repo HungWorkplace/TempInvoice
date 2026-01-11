@@ -34,7 +34,6 @@
           redirectUrl: "https://cuahangthuyvui.kiotviet.vn/sale/#/",
           apiBaseUrl:
             "https://localstorage-kv-sync.hung-workplace.workers.dev/temp-bill",
-          vatRate: 0.015,
         };
 
         const STORE = {
@@ -161,7 +160,9 @@
         function renderReceipt(doc, bill) {
           const items = Array.isArray(bill?.items) ? bill.items : [];
           const total = safeNumber(bill?.total, 0);
-          const vat = Math.round(total * CONFIG.vatRate);
+
+          // VAT is provided by backend.
+          const vat = safeNumber(bill?.vat, 0);
 
           // Optional fields (not present in current API, but supported if later added)
           const customerName = String(bill?.customerName ?? "").trim();
