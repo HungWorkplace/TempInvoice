@@ -1,11 +1,257 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>Temp Invoice Print</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        padding: 16px;
+      }
+      .muted {
+        color: #666;
+      }
+      .error {
+        color: #b00020;
+        white-space: pre-wrap;
+      }
+    </style>
   </head>
   <body>
-    Hello World!
+    <div id="status">Đang tải hóa đơn…</div>
+    <div id="details" class="muted"></div>
+    <div id="error" class="error" hidden></div>
+
+    <noscript> Trang này cần JavaScript để in hóa đơn. </noscript>
+
+    <script>
+      const REDIRECT_URL = "https://cuahangthuyvui.kiotviet.vn/sale/#/";
+      const TEMPLATE_URL = "./docs/template.html";
+      const API_BASE_URL =
+        "https://localstorage-kv-sync.hung-workplace.workers.dev/temp-bill";
+
+      const statusEl = document.getElementById("status");
+      const detailsEl = document.getElementById("details");
+      const errorEl = document.getElementById("error");
+
+      function setStatus(text, detail) {
+        statusEl.textContent = text;
+        detailsEl.textContent = detail || "";
+      }
+
+      function showError(message) {
+        errorEl.hidden = false;
+        errorEl.textContent = message;
+      }
+
+      function formatMoney(amount) {
+        const numeric = typeof amount === "number" ? amount : Number(amount);
+        if (!Number.isFinite(numeric)) return "";
+        return new Intl.NumberFormat("vi-VN").format(numeric);
+      }
+
+      function formatDateTime(value) {
+        const date = value ? new Date(value) : new Date();
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleString("vi-VN");
+      }
+
+      function safeNumber(value, fallback = 0) {
+        const numeric = typeof value === "number" ? value : Number(value);
+        return Number.isFinite(numeric) ? numeric : fallback;
+      }
+
+      function splitNameAndUnit(rawName) {
+        const name = String(rawName ?? "").trim();
+        if (!name) return { name: "", unit: "" };
+
+        // Common pattern in your data: "Tên hàng - (Đơn vị)"
+        const dashParenMatch = name.match(/^(.*?)(?:\s*-\s*)?\(([^)]+)\)\s*$/);
+        if (!dashParenMatch) return { name, unit: "" };
+
+        const baseName = String(dashParenMatch[1] ?? "").trim();
+        const unit = String(dashParenMatch[2] ?? "").trim();
+        return { name: baseName || name, unit };
+      }
+
+      function fillTemplate(templateHtml, billData) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(templateHtml, "text/html");
+
+        const root = doc.querySelector("#kv-cke-temp");
+        if (!root) {
+          throw new Error("Template thiếu #kv-cke-temp");
+        }
+
+        const items = Array.isArray(billData?.items) ? billData.items : [];
+        const total = safeNumber(billData?.total, 0);
+        const savedAt = billData?.savedAt;
+
+        // Fill item rows
+        const tableBody = root.querySelector("#itemTable tbody");
+        if (tableBody) {
+          const rows = Array.from(tableBody.querySelectorAll("tr"));
+          const headerRow = rows[0] || null;
+          const itemTemplateRow = rows[1] || null;
+
+          // Clear existing rows
+          tableBody.innerHTML = "";
+          if (headerRow) tableBody.appendChild(headerRow);
+
+          if (itemTemplateRow) {
+            for (const item of items) {
+              const qty = safeNumber(item?.qty, 0);
+              const amount = safeNumber(item?.amount, 0);
+              const unitPrice = qty > 0 ? Math.round(amount / qty) : amount;
+
+              const { name: baseName, unit } = splitNameAndUnit(item?.name);
+
+              const row = itemTemplateRow.cloneNode(true);
+              let html = row.innerHTML;
+
+              html = html.replaceAll("{So_Luong}", String(qty || ""));
+              html = html.replaceAll("{Don_Vi_Tinh}", unit);
+              html = html.replaceAll(
+                "{Ten_Hang_Hoa_Don_Gian}",
+                baseName
+              );
+              html = html.replaceAll("{Ghi_Chu_Hang_Hoa}", "");
+              html = html.replaceAll("{Don_Gia}", formatMoney(unitPrice));
+              html = html.replaceAll("{Thanh_Tien}", formatMoney(amount));
+
+              row.innerHTML = html;
+              tableBody.appendChild(row);
+            }
+          }
+        }
+
+        // Fill VAT (template uses an element, not a placeholder)
+        const vatEl = root.querySelector(".thue-moi");
+        if (vatEl) {
+          const vat = Math.round(total * 0.015);
+          vatEl.textContent = vat > 0 ? formatMoney(vat) : "0";
+        }
+
+        // Fill summary placeholders
+        root.innerHTML = root.innerHTML
+          .replaceAll("{Thoi_Gian_In}", formatDateTime(savedAt))
+          .replaceAll("{Tong_Tien_Hang}", formatMoney(total))
+          .replaceAll(
+            "{Tong_So_Luong}",
+            String(items.length)
+          )
+          // Unused placeholders from KiotViet template
+          .replaceAll("{So_Dien_Thoai_Cua_Hang}", "")
+          .replaceAll("{Khach_Hang}", "")
+          .replaceAll("{Ma_Don_Hang}", "")
+          .replaceAll("{Ten_Bang_Gia}", "")
+          // Strip any remaining {Placeholders}
+          .replace(/\{[^}]+\}/g, "");
+
+        return root.outerHTML;
+      }
+
+      function openPrintPopup(htmlToPrint) {
+        const popup = window.open("", "_blank", "width=520,height=760");
+        if (!popup) {
+          throw new Error(
+            "Không mở được popup in (có thể bị chặn). Hãy cho phép popup rồi thử lại."
+          );
+        }
+
+        popup.document.open();
+        popup.document.write(`<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Print</title>
+  </head>
+  <body>
+    ${htmlToPrint}
+    <script>
+      window.onload = () => {
+        // Slight delay helps some browsers finish layout before printing
+        setTimeout(() => {
+          try { window.focus(); } catch (e) {}
+          window.print();
+        }, 50);
+      };
+      window.onafterprint = () => {
+        // Close popup after user closes print dialog (print or cancel)
+        setTimeout(() => window.close(), 0);
+      };
+    <\/script>
+  </body>
+</html>`);
+        popup.document.close();
+
+        return popup;
+      }
+
+      function waitForPopupClose(popup) {
+        return new Promise((resolve) => {
+          const timer = window.setInterval(() => {
+            if (!popup || popup.closed) {
+              window.clearInterval(timer);
+              resolve();
+            }
+          }, 300);
+        });
+      }
+
+      async function main() {
+        const url = new URL(window.location.href);
+        const device = url.searchParams.get("device");
+        if (!device) {
+          setStatus("Thiếu tham số device.");
+          detailsEl.textContent = "Ví dụ: ?device=1 (device là số 1,2,3…)";
+          return;
+        }
+
+        setStatus("Đang lấy dữ liệu…", `device=${device}`);
+
+        const apiUrl = new URL(API_BASE_URL);
+        apiUrl.searchParams.set("device", device);
+
+        const [apiRes, templateRes] = await Promise.all([
+          fetch(apiUrl.toString(), { cache: "no-store" }),
+          fetch(TEMPLATE_URL, { cache: "no-store" }),
+        ]);
+
+        if (!apiRes.ok) {
+          throw new Error(`API lỗi: ${apiRes.status} ${apiRes.statusText}`);
+        }
+        if (!templateRes.ok) {
+          throw new Error(
+            `Không tải được template: ${templateRes.status} ${templateRes.statusText}`
+          );
+        }
+
+        const apiJson = await apiRes.json();
+        const billData = apiJson?.data;
+        if (!billData) {
+          throw new Error("API không có trường data");
+        }
+
+        const templateHtml = await templateRes.text();
+        const htmlToPrint = fillTemplate(templateHtml, billData);
+
+        setStatus("Đang mở popup in…");
+        const popup = openPrintPopup(htmlToPrint);
+
+        setStatus("Đang chờ in xong để quay lại KiotViet…");
+        await waitForPopupClose(popup);
+
+        window.location.href = REDIRECT_URL;
+      }
+
+      main().catch((err) => {
+        setStatus("Không thể in hóa đơn.");
+        showError(String(err?.message || err));
+      });
+    </script>
   </body>
 </html>
