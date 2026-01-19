@@ -250,7 +250,9 @@
             el(doc, "strong", "tong-tien-hang value", formatMoney(total))
           );
           root.appendChild(totalWrap);
-          root.appendChild(el(doc, "div", "note", "(Đã bao gồm thuế)"));
+          if (vat > 0) {
+            root.appendChild(el(doc, "div", "note", "(Đã bao gồm thuế)"));
+          }
 
           const spacer = doc.createElement("div");
           spacer.id = "hungw-test";
@@ -282,13 +284,15 @@
           tr2.appendChild(el(doc, "td", "dots", "........................."));
           detailsBody.appendChild(tr2);
 
-          // Row 3: VAT
-          const tr3 = doc.createElement("tr");
-          const td3 = doc.createElement("td");
-          appendText(doc, td3, "Thuế VAT 1.5% nộp về nhà nước: ");
-          td3.appendChild(el(doc, "span", null, formatMoney(vat)));
-          tr3.appendChild(td3);
-          detailsBody.appendChild(tr3);
+          // Row 3: VAT (only if VAT > 0)
+          if (vat > 0) {
+            const tr3 = doc.createElement("tr");
+            const td3 = doc.createElement("td");
+            appendText(doc, td3, "Thuế VAT 1.5% nộp về nhà nước: ");
+            td3.appendChild(el(doc, "span", null, formatMoney(vat)));
+            tr3.appendChild(td3);
+            detailsBody.appendChild(tr3);
+          }
 
           detailsTable.appendChild(detailsBody);
           root.appendChild(detailsTable);
